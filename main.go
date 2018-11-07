@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	WIDTH  = 1024
-	HEIGHT = 768
+	WIDTH   = 1024
+	HEIGHT  = 768
+	THREADS = 4
 )
 
 type coordinate struct {
@@ -25,8 +26,6 @@ var (
 	iterations = 500.0
 	x, y       = -0.5, 0.0
 	scale      = 0.002
-	inputs     = make(chan coordinate, WIDTH*HEIGHT)
-	outputs    = make(chan coordinate, WIDTH*HEIGHT)
 	infinity   = 1e+75
 	startTime  time.Time
 	done       bool
@@ -40,6 +39,8 @@ var (
 	}
 	palette = 0
 	power   = 1.0
+	inputs  = make(chan coordinate, WIDTH*HEIGHT)
+	outputs = make(chan coordinate, WIDTH*HEIGHT)
 )
 
 func worker(inputs <-chan coordinate, outputs chan<- coordinate) {
@@ -136,7 +137,7 @@ func run() {
 
 	resetInputs()
 
-	for w := 0; w < 4; w++ {
+	for w := 0; w < THREADS; w++ {
 		go worker(inputs, outputs)
 	}
 
