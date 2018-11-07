@@ -141,7 +141,7 @@ func run() {
 
 	/*-----------------------------------------------*/
 
-	second := time.Tick(time.Second)
+	ticker := time.Tick(time.Millisecond * 100)
 
 	for !window.Closed() {
 
@@ -229,9 +229,9 @@ func run() {
 		/*-----------------------------------------------*/
 
 		select {
-		case <-second:
+		case <-ticker:
 
-			/* --- Every tick (once per second) drain the output channel and update image --- */
+			/* --- Every tick (100ms) drain the output channel and update image --- */
 
 		receiver:
 			for {
