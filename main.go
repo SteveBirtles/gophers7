@@ -95,6 +95,10 @@ func calculateColor(value float64, p int) color.RGBA {
 
 	index := int(base) + 1
 
+	if index < 0 || index >= len(colors[p]) {
+		return color.RGBA{0, 0, 0, 0}
+	}
+
 	r := uint8(colors[p][index-1][0])
 	g := uint8(colors[p][index-1][1])
 	b := uint8(colors[p][index-1][2])
