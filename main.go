@@ -1,57 +1,60 @@
 package main
 
 import (
+	"fmt"
 	"github.com/faiface/pixel"
 	"github.com/faiface/pixel/pixelgl"
-	"image/color"
 	"image"
-	"time"
-	"fmt"
+	"image/color"
 	"math"
+	"time"
 )
 
 const (
-	WIDTH = 1024
+	WIDTH  = 1024
 	HEIGHT = 768
 )
 
-type fractalPoint struct {
-	x, y int
+type coordinate struct {
+	x, y  int
 	value float64
 }
 
 var (
 	fractal    [WIDTH][HEIGHT]float64
-	iterations  = 500
-	x, y              = -0.5, 0.0
-	scale            = 0.002
-	inputs          = make(chan fractalPoint, WIDTH*HEIGHT)
-	outputs        = make(chan fractalPoint, WIDTH*HEIGHT)
-	infexp          = 50.0
-	infinity      = math.Pow(10, infexp)
+	iterations = 500.0
+	x, y       = -0.5, 0.0
+	scale      = 0.002
+	inputs     = make(chan coordinate, WIDTH*HEIGHT)
+	outputs    = make(chan coordinate, WIDTH*HEIGHT)
+	infinity   = 1e+75
 	startTime  time.Time
 	done       bool
 	window     *pixelgl.Window
+	colors     = [][][3]float64{
+		{{0, 0, 255}, {255, 0, 255}, {255, 0, 0}, {255, 255, 0}, {0, 255, 0}, {0, 255, 255}, {0, 0, 0}},
+		{{0, 0, 0}, {255, 255, 255}, {0, 0, 0}},
+		{{255, 255, 255}, {0, 0, 0}},
+		{{0, 0, 0}, {255, 0, 0}, {255, 255, 0}, {255, 0, 0}, {255, 255, 0}, {0, 0, 0}},
+		{{255, 255, 255}, {255, 0, 0}, {0, 0, 0}, {255, 255, 0}, {255, 255, 255}, {0, 0, 255}, {0, 0, 64}},
+	}
+	palette = 0
+	power   = 1.0
 )
 
-
-func worker(inputs <-chan fractalPoint, outputs chan<- fractalPoint) {
+func worker(inputs <-chan coordinate, outputs chan<- coordinate) {
 
 	for point := range inputs {
 
 		c := complex(float64(point.x-WIDTH/2)*scale+x, float64(point.y-HEIGHT/2)*scale+y)
-
 		z := complex(0, 0)
-
 		var i int
-
-		for i = 0; i < iterations; i++ {
+		for i = 0; i < int(iterations); i++ {
 			z = z*z + c
 			if imag(z) > infinity || real(z) > infinity {
 				break
 			}
 		}
-
 		point.value = float64(i) / float64(iterations)
 
 		outputs <- point
@@ -60,17 +63,55 @@ func worker(inputs <-chan fractalPoint, outputs chan<- fractalPoint) {
 
 }
 
+func clearInputs() {
+	for {
+		select {
+		case <-inputs:
+		default:
+			return
+		}
+	}
+}
+
 func resetInputs() {
 	done = false
 	startTime = time.Now()
-	window.SetTitle(fmt.Sprintf("X: %16.16f Y: %16.16f Scale: %16.16f Iterations: %d Infinity: 10^%d", x, y, scale, iterations, int(infexp)))
-	for len(inputs) > 0 { <- inputs }
+	window.SetTitle(fmt.Sprintf("X: %16.16f Y: %16.16f Scale: %16.16f Iterations: %d Power: %f", x, y, scale, int(iterations), power))
+
+	clearInputs()
+
 	for i := 0; i < WIDTH/2; i++ {
 		for j := 0; j < HEIGHT; j++ {
-			inputs <- fractalPoint{WIDTH/2+ i, j, 0}
-			inputs <- fractalPoint{WIDTH/2- i -1, j, 0}
+			inputs <- coordinate{WIDTH/2 + i, j, 0}
+			inputs <- coordinate{WIDTH/2 - i - 1, j, 0}
 		}
 	}
+}
+
+func calculateColor(value float64, p int) color.RGBA {
+
+	if p >= len(colors) {
+		panic("Palette number too high!")
+	}
+
+	value = math.Pow(value, power)
+
+	base, frac := math.Modf(value * float64(len(colors[p])-1))
+
+	index := int(base) + 1
+
+	r := uint8(colors[p][index-1][0])
+	g := uint8(colors[p][index-1][1])
+	b := uint8(colors[p][index-1][2])
+
+	if frac != 0 {
+		r += uint8((colors[p][index][0] - colors[p][index-1][0]) * frac)
+		g += uint8((colors[p][index][1] - colors[p][index-1][1]) * frac)
+		b += uint8((colors[p][index][2] - colors[p][index-1][2]) * frac)
+	}
+
+	return color.RGBA{r, g, b, 0xff}
+
 }
 
 func run() {
@@ -116,40 +157,56 @@ func run() {
 		}
 
 		if window.JustPressed(pixelgl.MouseButtonRight) {
-			mouse := window.MousePosition()
-			x = (mouse.X-WIDTH/2)*scale + x
-			y = (HEIGHT/2-mouse.Y)*scale + y
 			scale *= 4
 			resetInputs()
 		}
 
 		if window.JustPressed(pixelgl.KeyPageUp) {
-			iterations *= 2
+			iterations *= 1.25
 			resetInputs()
 		}
 
 		if window.JustPressed(pixelgl.KeyPageDown) {
-			iterations /= 2
+			iterations /= 1.25
 			resetInputs()
 		}
 
-		if window.JustPressed(pixelgl.KeyEqual) {
-			infexp *= 1.5
-			infinity = math.Pow(10, infexp)
+		if window.JustPressed(pixelgl.KeyUp) {
+			power *= 1.25
 			resetInputs()
 		}
 
-		if window.JustPressed(pixelgl.KeyMinus) {
-			infexp /= 1.5
-			infinity = math.Pow(10, infexp)
+		if window.JustPressed(pixelgl.KeyDown) {
+			power /= 1.25
+			resetInputs()
+		}
+
+		if window.JustPressed(pixelgl.Key1) {
+			palette = 0
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.Key2) {
+			palette = 1
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.Key3) {
+			palette = 2
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.Key4) {
+			palette = 3
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.Key5) {
+			palette = 4
 			resetInputs()
 		}
 
 	receiver:
 		for !done {
 			select {
-			case point := <-outputs:
-				fractal[point.x][point.y] = point.value
+			case c := <-outputs:
+				fractal[c.x][c.y] = c.value
 			default:
 				if len(inputs) == 0 {
 					fmt.Println("Processing complete in", time.Since(startTime).Seconds(), "seconds.")
@@ -164,29 +221,7 @@ func run() {
 
 			for i := 0; i < WIDTH; i++ {
 				for j := 0; j < HEIGHT; j++ {
-
-					value := fractal[i][j] * 6
-					var c color.RGBA
-
-					if value < 1 {
-						c = color.RGBA{uint8(255 * value), 0, 255, 0xff}
-					} else if value < 2 {
-						value -= 1
-						c = color.RGBA{255, uint8(255 * value), uint8(255 * (1.0 - value)), 0xff}
-					} else if value < 3 {
-						value -= 2
-						c = color.RGBA{uint8(255 * (1.0 - value)), 255, 0, 0xff}
-					} else if value < 4 {
-						value -= 3
-						c = color.RGBA{0, 255, uint8(255 * value), 0xff}
-					} else if value < 5 {
-						value -= 4
-						c = color.RGBA{0, uint8(255 * (1.0 - value)), 255, 0xff}
-					} else {
-						value -= 5
-						c = color.RGBA{0, 0, uint8(255 * (1.0 - value)), 0xff}
-					}
-
+					c := calculateColor(fractal[i][j], palette)
 					image.Set(i, j, c)
 				}
 			}
