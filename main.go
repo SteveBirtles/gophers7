@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	WIDTH   = 1024
-	HEIGHT  = 768
-	THREADS = 4
+	WIDTH    = 1024
+	HEIGHT   = 768
+	THREADS  = 4
+	INFINITY = 1e+75
 )
 
 type coordinate struct {
@@ -22,14 +23,9 @@ type coordinate struct {
 }
 
 var (
-	fractal    [WIDTH][HEIGHT]float64
 	iterations = 500.0
 	x, y       = -0.5, 0.0
 	scale      = 0.002
-	infinity   = 1e+75
-	startTime  time.Time
-	done       bool
-	window     *pixelgl.Window
 	colors     = [][][3]float64{
 		{{0, 0, 255}, {255, 0, 255}, {255, 0, 0}, {255, 255, 0}, {0, 255, 0}, {0, 255, 255}, {0, 0, 0}},
 		{{0, 0, 0}, {255, 255, 255}, {0, 0, 0}},
@@ -39,20 +35,20 @@ var (
 	}
 	palette = 0
 	power   = 1.0
-	inputs  = make(chan coordinate, WIDTH*HEIGHT)
-	outputs = make(chan coordinate, WIDTH*HEIGHT)
 )
 
-func worker(inputs <-chan coordinate, outputs chan<- coordinate) {
+func worker(inputs chan coordinate, outputs chan coordinate) {
 
 	for point := range inputs {
+
+		/* --- Calculate value for point --- */
 
 		c := complex(float64(point.x-WIDTH/2)*scale+x, float64(point.y-HEIGHT/2)*scale+y)
 		z := complex(0, 0)
 		var i int
 		for i = 0; i < int(iterations); i++ {
 			z = z*z + c
-			if imag(z) > infinity || real(z) > infinity {
+			if imag(z) > INFINITY || real(z) > INFINITY {
 				break
 			}
 		}
@@ -64,22 +60,20 @@ func worker(inputs <-chan coordinate, outputs chan<- coordinate) {
 
 }
 
-func clearInputs() {
+func resetInputs(inputs chan coordinate) {
+
+	/* --- Clear the input channel --- */
+
+clear:
 	for {
 		select {
 		case <-inputs:
 		default:
-			return
+			break clear
 		}
 	}
-}
 
-func resetInputs() {
-	done = false
-	startTime = time.Now()
-	window.SetTitle(fmt.Sprintf("X: %16.16f Y: %16.16f Scale: %16.16f Iterations: %d Power: %f", x, y, scale, int(iterations), power))
-
-	clearInputs()
+	/* --- Fill the input channel --- */
 
 	for i := 0; i < WIDTH/2; i++ {
 		for j := 0; j < HEIGHT; j++ {
@@ -87,6 +81,7 @@ func resetInputs() {
 			inputs <- coordinate{WIDTH/2 - i - 1, j, 0}
 		}
 	}
+
 }
 
 func calculateColor(value float64, p int) color.RGBA {
@@ -96,7 +91,6 @@ func calculateColor(value float64, p int) color.RGBA {
 	}
 
 	value = math.Pow(value, power)
-
 	base, frac := math.Modf(value * float64(len(colors[p])-1))
 
 	index := int(base) + 1
@@ -122,28 +116,34 @@ func run() {
 		Bounds: pixel.R(0, 0, WIDTH, HEIGHT),
 		VSync:  true,
 	}
-	var err error
-	window, err = pixelgl.NewWindow(cfg)
+	window, err := pixelgl.NewWindow(cfg)
 	if err != nil {
 		panic(err)
 	}
 
-	image := image.NewNRGBA(image.Rect(0, 0, WIDTH, HEIGHT))
+	img := image.NewNRGBA(image.Rect(0, 0, WIDTH, HEIGHT))
+	pic := pixel.PictureDataFromImage(img)
+	sprite := pixel.NewSprite(pic, pic.Bounds())
 
-	picture := pixel.PictureDataFromImage(image)
-	sprite := pixel.NewSprite(picture, picture.Bounds())
+	/*-----------------------------------------------*/
 
-	second := time.Tick(time.Second)
+	/* --- Prepare the input and output channels --- */
 
-	resetInputs()
+	inputs := make(chan coordinate, WIDTH*HEIGHT)
+	outputs := make(chan coordinate, WIDTH*HEIGHT)
+	resetInputs(inputs)
+
+	/* --- Launch the workers! --- */
 
 	for w := 0; w < THREADS; w++ {
 		go worker(inputs, outputs)
 	}
 
-	for !window.Closed() {
+	/*-----------------------------------------------*/
 
-		window.Clear(color.RGBA{0, 0, 0, 0xff})
+	second := time.Tick(time.Second)
+
+	for !window.Closed() {
 
 		if window.JustPressed(pixelgl.KeyEscape) {
 			window.SetClosed(true)
@@ -154,107 +154,104 @@ func run() {
 			x = (mouse.X-WIDTH/2)*scale + x
 			y = (HEIGHT/2-mouse.Y)*scale + y
 			scale /= 4
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.MouseButtonRight) {
 			scale *= 4
-			resetInputs()
+			resetInputs(inputs)
 		}
 
 		if window.JustPressed(pixelgl.KeyPageDown) {
 			scale *= 1.25
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.KeyPageUp) {
 			scale /= 1.25
-			resetInputs()
+			resetInputs(inputs)
 		}
 
 		if window.JustPressed(pixelgl.KeyW) {
 			iterations *= 1.25
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.KeyS) {
 			iterations /= 1.25
-			resetInputs()
+			resetInputs(inputs)
 		}
 
 		if window.JustPressed(pixelgl.KeyD) {
 			power *= 1.25
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.KeyA) {
 			power /= 1.25
-			resetInputs()
+			resetInputs(inputs)
 		}
 
 		if window.JustPressed(pixelgl.KeyUp) {
 			y -= (WIDTH / 10) * scale
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.KeyDown) {
 			y += (WIDTH / 10) * scale
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.KeyLeft) {
 			x -= (WIDTH / 10) * scale
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.KeyRight) {
 			x += (WIDTH / 10) * scale
-			resetInputs()
+			resetInputs(inputs)
 		}
 
 		if window.JustPressed(pixelgl.Key1) {
 			palette = 0
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.Key2) {
 			palette = 1
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.Key3) {
 			palette = 2
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.Key4) {
 			palette = 3
-			resetInputs()
+			resetInputs(inputs)
 		}
 		if window.JustPressed(pixelgl.Key5) {
 			palette = 4
-			resetInputs()
+			resetInputs(inputs)
 		}
 
-	receiver:
-		for !done {
-			select {
-			case c := <-outputs:
-				fractal[c.x][c.y] = c.value
-			default:
-				if len(inputs) == 0 {
-					fmt.Println("Processing complete in", time.Since(startTime).Seconds(), "seconds.")
-					done = true
-				}
-				break receiver
-			}
-		}
+		/*-----------------------------------------------*/
 
 		select {
 		case <-second:
 
-			for i := 0; i < WIDTH; i++ {
-				for j := 0; j < HEIGHT; j++ {
-					c := calculateColor(fractal[i][j], palette)
-					image.Set(i, j, c)
+			/* --- Every tick (once per second) drain the output channel and update image --- */
+
+		receiver:
+			for {
+				select {
+				case p := <-outputs:
+					img.Set(p.x, p.y, calculateColor(p.value, palette))
+				default:
+					break receiver
 				}
 			}
 
-			picture := pixel.PictureDataFromImage(image)
-			sprite = pixel.NewSprite(picture, picture.Bounds())
+			pic := pixel.PictureDataFromImage(img)
+			sprite = pixel.NewSprite(pic, pic.Bounds())
+
+			window.SetTitle(fmt.Sprintf("X: %16.16f Y: %16.16f Scale: %16.16f Iterations: %d Power: %f", x, y, scale, int(iterations), power))
 
 		default:
 		}
+
+		window.Clear(color.RGBA{0, 0, 0, 0xff})
 
 		sprite.Draw(window, pixel.IM.Moved(window.Bounds().Center()))
 
