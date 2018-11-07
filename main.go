@@ -156,29 +156,52 @@ func run() {
 			scale /= 4
 			resetInputs()
 		}
-
 		if window.JustPressed(pixelgl.MouseButtonRight) {
 			scale *= 4
 			resetInputs()
 		}
 
+		if window.JustPressed(pixelgl.KeyPageDown) {
+			scale *= 1.25
+			resetInputs()
+		}
 		if window.JustPressed(pixelgl.KeyPageUp) {
-			iterations *= 1.25
+			scale /= 1.25
 			resetInputs()
 		}
 
-		if window.JustPressed(pixelgl.KeyPageDown) {
+		if window.JustPressed(pixelgl.KeyW) {
+			iterations *= 1.25
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.KeyS) {
 			iterations /= 1.25
 			resetInputs()
 		}
 
-		if window.JustPressed(pixelgl.KeyUp) {
+		if window.JustPressed(pixelgl.KeyD) {
 			power *= 1.25
 			resetInputs()
 		}
-
-		if window.JustPressed(pixelgl.KeyDown) {
+		if window.JustPressed(pixelgl.KeyA) {
 			power /= 1.25
+			resetInputs()
+		}
+
+		if window.JustPressed(pixelgl.KeyUp) {
+			y -= (WIDTH / 10) * scale
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.KeyDown) {
+			y += (WIDTH / 10) * scale
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.KeyLeft) {
+			x -= (WIDTH / 10) * scale
+			resetInputs()
+		}
+		if window.JustPressed(pixelgl.KeyRight) {
+			x += (WIDTH / 10) * scale
 			resetInputs()
 		}
 
